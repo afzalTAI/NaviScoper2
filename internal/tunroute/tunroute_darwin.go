@@ -94,6 +94,9 @@ func Start() (*Device, error) {
 	copy(info.name[:], utunControlName)
 	if err := ioctlPtr(fd, ctlIOCGInfo, unsafe.Pointer(&info)); err != nil {
 		syscall.Close(fd)
+		if errors.Is(err, syscall.ENOENT) {
+			return nil, errors.New("tunroute: this macOS restricts utun to entitled apps (verified on macOS 27: the kernel refuses the controller lookup even for root); transparent routing here requires a Network Extension build — see README")
+		}
 		return nil, fmt.Errorf("tunroute: utun controller unavailable: %w", err)
 	}
 	addr := sockaddrCtl{sysAddr: afSysControl, scID: info.id} // scUnit 0: kernel picks the next unit

@@ -99,8 +99,7 @@ sudo ./dist/nscope -tun                       # all traffic; DNS via DoH (cloudf
 sudo ./dist/nscope -tun -secure-dns quad9 -upstream socks5://127.0.0.1:40000
 ```
 
-- Requires `sudo`, run from the CLI (the menu agent reports this if asked).
-- DNS inside the tunnel is always DNS-over-HTTPS — a system-resolver fallback would loop into the tunnel. Blocked domains return NXDOMAIN before any connection is made.
+- **macOS 27 gate**: Apple restricts raw utun creation to entitled apps on macOS 27 (`-tun` reports this at startup; verified with a native-C probe as root — the kernel refuses the `com.apple.net.utun` controller lookup). On affected systems use **Route system traffic** plus `-upstream` (Warp) instead, which covers apps that honor system proxy settings without a TUN device.
 - NaviScope's own sockets are pinned to the physical interface (`IP_BOUND_IF`) so they can never loop back into the tunnel.
 - Non-DNS UDP is relayed directly (not through an upstream).
 - Crash-safe: the tunnel routes vanish with the process, so a killed tunnel self-heals the routing table.
