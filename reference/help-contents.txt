@@ -1,0 +1,46 @@
+:Base Navhelp.HLP
+1 Setup
+2 Setup Window=Setup
+2 Ad Blocking=Block_Advertisments
+2 Browsers=Setup_Browsers
+2 Logging=Setup_Logging
+2 MTU/RWIN=Setup_MTU_RWIN
+2 Options=Setup_Options
+2 Setup - Prefetch=Setup_Prefetch
+2 Proxy=Setup_Proxy
+1 Systray Icon
+2 Systray Icon=Systray_Icon
+2 Systray Menu - Right Click=Systray_Menu_Right_Click
+1 Internet Search Assistant
+2 How to use the Internet Search Assistant=Internet_Search_Assistant
+1 Internet Shopping Assistant
+2 How to use the Internet Shopping Assistant=Internet_Shopping_Assistant
+1 Yahoo Message Board Ignore List
+2 Yahoo Message Board Author Ignore List=Yahoo_Ignore_List
+1 Block & Filter
+2 Block & Filter=Block_Filter
+2 Block & Filter - Configure=Block_Filter_Configure
+2 Block & Filter - Keywords=Block_Filter_Keywords
+2 Block & Filter - Comment Pair Filtering=Block_Filter_Keywords
+2 Block Advertisments=Block_Advertisments
+2 Block Backgrounds=Block_Backgrounds
+2 Block Blinking Text=Block_Blinking_Text
+2 Block Cookies=Block_Cookies
+2 Block Sounds=Block_Sounds
+1 Toolbar
+2 Toolbar Window=Toolbar
+2 Toolbar Buttons=Toolbar_Buttons
+2 Toolbar Menu=Toolbar_Menu
+2 Toolbar - Status Window=Toolbar_Status_Window
+2 Toolbar - Status Window Menu=Toolbar_Status_Window_Menu
+1 Resource Bars
+2 Resource Bars Window=Resource_Bars_Window
+2 Resource Bar Detail Window=Resource_Bar_Detail_Window
+1 Advertisment Blocking
+2 HOW TO=Block_Advertisments
+1 Uninstalling, Disabling, Enabling, etc.
+2 HOW TO=Systray_Menu_Right_Click
+1 Prefetching
+2 HOW TO=Prefetching
+1 Browser Address Window - Auto Complete Feature
+2 HOW TO=Browser_Address_Window_Auto_Complete_Feature
