@@ -1,110 +1,157 @@
-# NaviScopeReborn
+# NaviScope
 
-A portable Go explicit HTTP/HTTPS proxy with a local browser interface for macOS, Linux, and Windows. This is a new standard-library implementation inspired by inspected Naviscope behavior, not recovered original source or complete feature parity.
+A fast, local HTTP/HTTPS proxy for macOS, Linux, and Windows — with a macOS menu-bar agent, secure DNS, upstream chaining, and a built-in web console. Standard library only; no third-party dependencies.
 
-## Build and run
+NaviScope sits between your apps and the internet: it forwards HTTP, tunnels HTTPS end-to-end without decrypting it, filters domains you choose, can resolve every hostname over encrypted DNS, and can chain all traffic through an upstream provider (for example Cloudflare Warp). You stay in control from a menu-bar icon or a browser dashboard — nothing about your system is changed silently.
 
-Requires Go 1.26 or newer; no external dependencies.
+## Features
+
+| Capability | What it does |
+|---|---|
+| **HTTP forwarding** | Explicit-proxy forwarding with hop-by-hop header hygiene, query/host preservation, and bounded timeouts |
+| **HTTPS tunneling** | CONNECT byte tunnels — end-to-end TLS between you and the site; NaviScope never decrypts, strips, or caches HTTPS |
+| **Domain filtering** | Block domains (subdomains included) and strip outbound HTTP cookies, editable live from the console or menu |
+| **Menu-bar agent** (macOS) | Status, filtering on/off, system-traffic routing, dashboard, and quit — one click in the menu bar |
+| **System routing** (macOS) | Point the system-wide proxy at NaviScope with automatic snapshot/restore |
+| **Secure DNS** | DNS-over-HTTPS via Cloudflare, Google, Quad9, or OpenDNS — no plaintext DNS, no ISP visibility |
+| **Upstream chaining** | Route all traffic through a SOCKS5 or HTTP CONNECT provider (Warp, corporate proxy, self-hosted) |
+| **Web console** | Live counters, policy editing, and connection instructions at `127.0.0.1:8082` |
+| **Hard boundaries** | IPv4 loopback-only listeners, CONNECT port whitelist, bounded tunnels, graceful shutdown, race-tested |
+
+## Install (macOS)
+
+Requires Go 1.26+ and Xcode Command Line Tools.
+
+```sh
+git clone https://github.com/afzalTAI/NaviScoper2.git
+cd NaviScoper2
+sh scripts/build-dmg.sh        # → dist/NaviScope-0.1-universal.dmg
+open dist/NaviScope-0.1-universal.dmg   # drag NaviScope into Applications
+```
+
+- **Universal binary** — Apple Silicon and Intel in one app.
+- Minimum macOS: **10.15 Catalina**.
+- The DMG is ad-hoc signed: right-click → **Open** once to pass Gatekeeper.
+- No Dock icon — look for the antenna icon 📡 on the **right** side of the menu bar.
+
+Then flip **Route system traffic** in the agent menu, or point your browser's HTTP/HTTPS proxy at `127.0.0.1:8081` manually.
+
+## Quick start (any OS)
 
 ```sh
 go build -o dist/nscope ./cmd/nscope
 ./dist/nscope
-# Or run from source:
+# or straight from source:
 go run ./cmd/nscope
 ```
 
-Open **http://127.0.0.1:8082** after starting NaviScope. The browser interface is embedded in the binary; no Node installation, asset directory, or internet connection is required.
+Set your browser or system proxy to `127.0.0.1:8081` and open **http://127.0.0.1:8082** for the console. Stop with Ctrl-C (press twice to force-quit immediately); SIGTERM/SIGHUP also drain gracefully.
 
-The interface shows session request counts, active connections, blocked requests, and connection limits. Add/remove domain rules and change HTTP cookie stripping, then select **Save changes**. Policy changes apply to subsequent requests; established HTTPS tunnels are unaffected. UI changes last for the current process only. Restarting restores the startup flags.
+## The menu-bar agent (macOS)
 
-On Windows, build with `go build -o dist/nscope.exe ./cmd/nscope`, then run `.\dist\nscope.exe`. Set your browser's HTTP and HTTPS proxy manually to `127.0.0.1:8081`. No browser/system settings are changed. Stop with Ctrl+C; Unix SIGTERM also requests graceful shutdown.
+Built with `sh scripts/build-macos-app.sh` (or taken from the DMG), the agent runs the full proxy plus:
 
-Stop with Ctrl+C (or Unix SIGTERM/SIGHUP) for a graceful shutdown; a second Ctrl+C force-quits immediately. When started with `go run`, NaviScope also watches its parent: if the `go run` process is force-killed (IDE stop buttons, `kill -9`) instead of interrupted, the child exits on its own rather than lingering on ports 8081/8082. A leftover instance from before this safeguard can be removed with `pkill -f nscope`.
+| Menu row | Behavior |
+|---|---|
+| **Status** (grayed) | State, uptime, and live counters — refreshed every time the menu opens |
+| **Filtering enabled** | Pause/resume: traffic keeps flowing while deny rules and cookie stripping are suspended; the CONNECT port whitelist stays enforced |
+| **Route system traffic** | Sets the macOS system-wide HTTP/HTTPS proxy to NaviScope (snapshots first; quitting restores exactly what was there; needs an admin-group user) |
+| **Open dashboard…** | Opens the web console |
+| **Quit NaviScope** | Same graceful drain as Ctrl-C |
 
-### Route all system traffic automatically
+All startup flags work: `open NaviScope.app --args -deny example.com -secure-dns quad9`.
 
-The macOS agent's **Route system traffic** row points the system-wide HTTP/HTTPS proxy at NaviScope (snapshot first; quitting restores exactly what was there). It needs an admin-group user, applies to apps that honor system proxy settings (browsers, most GUI apps — not CLI tools or DNS), and is never changed silently. After a force-kill (`kill -9`), run `sh scripts/unset-system-proxy.sh` to restore.
+If the app is ever force-killed while routing system traffic, run `sh scripts/unset-system-proxy.sh` to restore your settings. Routing applies to apps that honor system proxy settings (browsers and most GUI apps); command-line tools and raw DNS are unaffected.
 
-### Secure DNS and upstream tunneling
+## Secure DNS
 
-```sh
-./dist/nscope -secure-dns cloudflare   # or google, quad9, opendns, or https://IP/dns-query
-./dist/nscope -upstream socks5://127.0.0.1:40000   # e.g. Cloudflare Warp's local proxy
-./dist/nscope -secure-dns quad9 -upstream http://proxy.example.net:3128
-```
-
-`-secure-dns` resolves every hostname via DNS-over-HTTPS to the chosen provider (bootstrap IPs pinned; no system-resolver fallback; custom URLs must use an IP-literal host). `-upstream` chains all outbound traffic through a SOCKS5 or HTTP CONNECT provider — run Cloudflare Warp in proxy mode (`warp-cli set-mode proxy`, SOCKS5 on 127.0.0.1:40000) and point NaviScope at it for Warp-style tunneling. HTTPS stays end-to-end encrypted in both modes.
-
-## macOS menu-bar agent
-
-macOS can package the same proxy as a menu-bar agent (status item on the **right** side of the menu bar; the left side is reserved for app menus and cannot host agents):
+Resolve every hostname over DNS-over-HTTPS — your ISP (or anyone on the network) no longer sees your DNS lookups:
 
 ```sh
-sh scripts/build-macos-app.sh   # builds dist/NaviScope.app (ad-hoc signed)
-open dist/NaviScope.app
+./dist/nscope -secure-dns cloudflare   # or google | quad9 | opendns
+./dist/nscope -secure-dns https://1.1.1.1/dns-query   # custom endpoint (IP-literal host)
 ```
 
-The agent has no Dock icon and shows a live menu: session status, a **Filtering enabled** toggle, **Open dashboard…**, and **Quit NaviScope**. Pausing keeps traffic flowing while suspending deny rules and cookie stripping; the CONNECT port whitelist stays enforced. Stop signals (Ctrl+C in a terminal, SIGTERM/SIGHUP) use the same graceful drain as the CLI. The agent is macOS-only (`cmd/nscope-menu`, cgo/AppKit, no new dependencies); on other platforms it compiles to a stub that reports that the agent requires macOS. Startup flags are the same as the CLI, e.g. `open dist/NaviScope.app --args -deny example.com`.
+- Preset providers use pinned bootstrap IPs; the endpoint hostname itself never leaks to plaintext DNS.
+- Strict mode: if DoH fails, lookups fail — there is no silent fallback to the system resolver.
+- A/AAAA queries, CNAME chains, and compression handled per RFC 1035/8484, with a TTL-honoring cache.
+- Hostnames never appear in logs or error messages.
 
-### Distributable DMG
+## Upstream chaining (Warp-style tunneling)
+
+Send all NaviScope traffic through a SOCKS5 or HTTP CONNECT provider:
 
 ```sh
-sh scripts/build-dmg.sh   # dist/NaviScope-0.1-universal.dmg (arm64 + amd64)
+./dist/nscope -upstream socks5://127.0.0.1:40000          # Cloudflare Warp local proxy
+./dist/nscope -upstream http://user:pass@proxy.example.net:3128
+./dist/nscope -secure-dns quad9 -upstream socks5://127.0.0.1:40000
 ```
 
-The DMG carries the menu-bar agent (universal binary, app icon, drag-to-Applications layout). It is ad-hoc signed: on another Mac, right-click → **Open** once to pass Gatekeeper. Minimum macOS is **10.15 Catalina** — the Go runtime's floor; no maintained toolchain can target Sierra (10.12). Ubuntu 24.04+ (.deb) and Windows 11 packages are planned next; the CLI (`dist/nscope[-<os>-<arch>]`) already builds for all six targets.
+To combine with [Cloudflare Warp](https://1.1.1.1): install Warp, run `warp-cli set-mode proxy` (SOCKS5 on `127.0.0.1:40000`), then start NaviScope with the upstream flag above. Every outbound connection — HTTP and HTTPS tunnels alike — flows through the provider; HTTPS remains end-to-end encrypted.
 
-```sh
-./dist/nscope -deny example.com,ads.example.org -strip-request-cookies
-./dist/nscope -connect-ports 443,8443 -metadata-log
-curl --noproxy '' --proxy http://127.0.0.1:8081 http://127.0.0.1:8000/
-```
+## Web console
+
+`http://127.0.0.1:8082` (disable with `-no-ui`) shows session request counts, tunnel attempts, blocked requests, active connections, and connection limits. Edit blocked domains and cookie stripping live — changes apply to new requests immediately and last for the session. The console is loopback-only, host-pinned, token-guarded, and served with a restrictive CSP.
 
 ## Configuration
 
-Startup configuration is through CLI flags; no configuration file is read. Domain rules and cookie stripping can also be changed in the browser interface during a session.
+All configuration is via flags (no config files). The menu agent accepts the same flags via `--args`.
 
 | Flag | Default | Behavior |
 |---|---|---|
-| `-listen` | `127.0.0.1:8081` | Literal IPv4 loopback only; ports 1–65535 |
-| `-ui-listen` | `127.0.0.1:8082` | Local browser interface; literal IPv4 loopback only |
-| `-no-ui` | false | Start the proxy without the browser interface |
-| `-deny` | empty | Comma-separated domains/IPs; domains include subdomains, matched at label boundaries |
-| `-strip-request-cookies` | false | Removes outgoing HTTP `Cookie`; preserves response `Set-Cookie` |
-| `-connect-ports` | `443` | Allowed CONNECT destination ports |
-| `-metadata-log` | false | JSON operation and target host/port; no credentials, cookies, bodies, paths, or queries |
+| `-listen` | `127.0.0.1:8081` | Proxy listener; literal IPv4 loopback only |
+| `-ui-listen` | `127.0.0.1:8082` | Console listener; literal IPv4 loopback only |
+| `-no-ui` | false | Run the proxy without the console |
+| `-deny` | empty | Comma-separated domains/IPs to block; subdomains included |
+| `-strip-request-cookies` | false | Remove outbound HTTP `Cookie` headers (response `Set-Cookie` untouched; HTTPS unaffected) |
+| `-connect-ports` | `443` | Permitted CONNECT destination ports |
 | `-secure-dns` | empty | DoH preset (`cloudflare`, `google`, `quad9`, `opendns`) or `https://IP/dns-query`; empty = system resolver |
 | `-upstream` | empty | Chain all outbound traffic via `socks5://[user:pass@]host:port` or `http://host:port` |
-| `-request-timeout` | `2m` | Total HTTP exchange and client read/write bound |
+| `-metadata-log` | false | JSON log of operation and target host/port only — never credentials, cookies, bodies, paths, or queries |
+| `-request-timeout` | `2m` | Total HTTP exchange bound |
 | `-tunnel-timeout` | `10m` | Maximum CONNECT tunnel lifetime |
 | `-shutdown-timeout` | `5s` | HTTP drain period before forced cancellation |
 
-Timeouts must be positive. Upstream dialing is bounded to 10s, response headers to 15s, client headers to 10s, and idle client connections to 60s. CONNECT sockets close immediately on shutdown; ordinary HTTP requests drain within the grace period.
-
-HTTP forwarding streams bodies and preserves status, duplicate response headers, trailers, target Host, and query bytes. Hop-by-hop headers and proxy credentials are removed. The upstream transport ignores environment proxy variables and reuses connections. Upstream connection failures return 502; an expired HTTP request deadline returns 504 if headers have not already been sent. Interrupted streamed responses are closed rather than replaced with an error body.
-
-HTTPS uses CONNECT byte tunneling with end-to-end TLS: no generated certificates or decryption. HTTPS policies apply to the requested CONNECT host/port; HTTPS cookies remain encrypted. Domain rules match the requested hostname, not resolved IPs or DNS aliases. ASCII DNS names (including punycode) and IP literals are supported; wildcards, URL rules, and Unicode hostnames are rejected.
-
-## Tests and cross-builds
+## Building
 
 ```sh
-go test -race ./...
+go test -race ./...     # full suite, race detector
 go vet ./...
-./scripts/cross-build.sh
+go build -o dist/nscope ./cmd/nscope
+sh scripts/cross-build.sh   # all six targets: darwin/linux/windows × amd64/arm64
+sh scripts/build-macos-app.sh   # dist/NaviScope.app (universal)
+sh scripts/build-dmg.sh         # dist/NaviScope-<version>-universal.dmg
 ```
 
-The console has its own loopback listener. It requires the configured Host, rejects cross-origin API access, and requires a per-process token and same-origin JSON PUT for edits. Scripts, styles, and icons are served locally with a restrictive Content Security Policy. The interface stores aggregate counters, not browsing URLs, headers, bodies, or credentials. Open the printed numeric address rather than a hostname alias.
+Project layout:
 
-Tests use in-process fixtures and localhost HTTP/TLS/TCP servers. They never run the legacy executable or call embedded service endpoints. The build script produces six CGO-free binaries in `dist/`; it does not execute them. See [VALIDATION.md](VALIDATION.md) for checks actually performed and sandbox limitations. Compilation alone does not establish native runtime compatibility.
+```
+cmd/nscope/          CLI proxy
+cmd/nscope-menu/     macOS menu-bar agent (cgo/AppKit; stub elsewhere)
+internal/proxy/      forwarding, tunnels, policies, pause mode
+internal/doh/        DNS-over-HTTPS resolver (RFC 8484/1035)
+internal/upstream/   SOCKS5 + HTTP CONNECT chaining (RFC 1928/1929)
+internal/sysproxy/   macOS system-proxy routing with snapshot/restore
+internal/console/    embedded web console
+internal/cli/        shared flags and process lifecycle
+scripts/             build + packaging + emergency unroute helpers
+```
 
-## Scope and evidence
+## Security notes
 
-The first proxy foundation is approved and implemented. HTML rewriting, prefetch/cache, native desktop/tray integration, automatic browser changes, updates, clock changes, and MTU tuning are outside this build.
+- Listeners bind to literal IPv4 loopback only; the proxy is not reachable from the network.
+- HTTPS is never decrypted, re-signed, or inspected — NaviScope sees destinations, not contents.
+- CONNECT destinations are whitelisted by port; tunnel lifetimes are bounded.
+- System settings change only through explicit toggles, are snapshotted first, and are restored on quit (rollback on any partial failure).
+- The console is loopback-only with host pinning, same-origin checks, a per-process token, and a strict CSP.
+- Browsing URLs, bodies, cookies, and credentials are never logged.
 
-- [Approved specification](SPEC.md)
-- [Annotated legacy evidence](reference/code-reference.md)
-- [Static inspection report](reference/inspection-report.md)
-- [Original application disassembly](reference/application-disassembly.txt)
-- [Imports and resource inventory](reference/inventory.json)
+## Roadmap
 
-Confirmed legacy evidence includes listener calls, HTTP templates, selected browser-configuration routines, and a conditional cookie-inclusion branch. Loopback-only port 8081, explicit cookie stripping, domain policy, restricted CONNECT, timeouts, metadata logging, and the local browser console are **new design choices**. The original cookie predicate and complete filtering/cache algorithms remain unknown. Reference files are preserved; the original EXE has never been executed during this work and is not included in the project.
+- Transparent utun-based routing (all traffic including CLI tools and DNS)
+- Ubuntu 24.04+ (`.deb`) and Windows 11 packages
+- Notarized DMG with a Developer ID
+
+## License
+
+Provided as-is for personal use. See repository for details.
