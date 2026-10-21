@@ -40,6 +40,11 @@ const (
 // address of a usable family exists for the host.
 var ErrNoAddresses = errors.New("doh: no addresses for host")
 
+// errNoSuchName is the LookupIP failure for a name the provider says does not
+// exist. It matches both ErrNoAddresses (so existing callers keep working) and
+// ErrNXDomain (so raw-DNS callers can answer with the NXDOMAIN rcode).
+var errNoSuchName = fmt.Errorf("%w: %w", ErrNoAddresses, ErrNXDomain)
+
 // Resolver performs A and AAAA lookups against one DoH endpoint and caches the
 // results. It is safe for concurrent use.
 type Resolver struct {
@@ -148,21 +153,28 @@ func (r *Resolver) LookupIP(ctx context.Context, host string) ([]netip.Addr, err
 	if addr, err := netip.ParseAddr(name); err == nil {
 		return []netip.Addr{addr.Unmap()}, nil
 	}
-	if addrs, ok := r.cacheGet(name, time.Now()); ok {
-		if len(addrs) == 0 {
-			return nil, ErrNoAddresses
-		}
-		return addrs, nil
+	if entry, ok := r.cacheGet(name, time.Now()); ok {
+		return addrsOrError(entry.addrs, entry.nxdomain)
 	}
-	addrs, ttl, err := r.lookupBoth(ctx, name)
+	addrs, ttl, nxdomain, err := r.lookupBoth(ctx, name)
 	if err != nil {
 		return nil, err
 	}
-	r.cachePut(name, addrs, ttl, time.Now())
-	if len(addrs) == 0 {
-		return nil, ErrNoAddresses
+	r.cachePut(name, addrs, nxdomain, ttl, time.Now())
+	return addrsOrError(addrs, nxdomain)
+}
+
+// addrsOrError turns a lookup outcome into the LookupIP result. An empty
+// answer is ErrNoAddresses; a non-existent name additionally matches
+// ErrNXDomain so that raw-DNS callers can rebuild the NXDOMAIN rcode.
+func addrsOrError(addrs []netip.Addr, nxdomain bool) ([]netip.Addr, error) {
+	if len(addrs) > 0 {
+		return addrs, nil
 	}
-	return addrs, nil
+	if nxdomain {
+		return nil, errNoSuchName
+	}
+	return nil, ErrNoAddresses
 }
 
 // normalizeHost lowercases the host and removes an optional trailing dot or
@@ -185,8 +197,9 @@ type queryResult struct {
 }
 
 // lookupBoth issues the A and AAAA queries concurrently. The lookup succeeds if
-// at least one of them is answered by the server.
-func (r *Resolver) lookupBoth(ctx context.Context, name string) ([]netip.Addr, time.Duration, error) {
+// at least one of them is answered by the server. The third result reports that
+// every answer was NXDOMAIN, i.e. the name itself does not exist.
+func (r *Resolver) lookupBoth(ctx context.Context, name string) ([]netip.Addr, time.Duration, bool, error) {
 	var wg sync.WaitGroup
 	results := make([]queryResult, 2)
 	for i, qtype := range [2]uint16{typeA, typeAAAA} {
@@ -202,28 +215,30 @@ func (r *Resolver) lookupBoth(ctx context.Context, name string) ([]netip.Addr, t
 	var addrs []netip.Addr
 	ttl := ^uint32(0)
 	answered := false
+	noError := false
 	var firstErr error
 	for _, res := range results {
 		switch {
 		case res.err == nil:
 			answered = true
+			noError = true
 			addrs = append(addrs, res.addrs...)
 			if len(res.addrs) > 0 {
 				ttl = minTTLOf(ttl, res.ttl)
 			}
-		case errors.Is(res.err, errNXDomain):
+		case errors.Is(res.err, ErrNXDomain):
 			answered = true
 		case firstErr == nil:
 			firstErr = res.err
 		}
 	}
 	if !answered {
-		return nil, 0, firstErr
+		return nil, 0, false, firstErr
 	}
 	if len(addrs) == 0 {
-		return nil, negativeTTL, nil
+		return nil, negativeTTL, !noError, nil
 	}
-	return dedupe(addrs), clampTTL(ttl), nil
+	return dedupe(addrs), clampTTL(ttl), false, nil
 }
 
 func dedupe(addrs []netip.Addr) []netip.Addr {

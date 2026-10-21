@@ -15,8 +15,12 @@ const (
 	maxCacheEntries = 512
 )
 
+// cacheEntry remembers one lookup outcome. An empty addrs slice is a negative
+// answer; nxdomain additionally marks it as "the name does not exist" so that
+// raw-DNS callers can reproduce the NXDOMAIN rcode from cache.
 type cacheEntry struct {
 	addrs     []netip.Addr
+	nxdomain  bool
 	expiresAt time.Time
 }
 
@@ -31,25 +35,26 @@ func clampTTL(seconds uint32) time.Duration {
 	return ttl
 }
 
-// cacheGet returns the cached addresses for name. The second result reports a
-// live entry; an empty address slice is a cached negative answer.
-func (r *Resolver) cacheGet(name string, now time.Time) ([]netip.Addr, bool) {
+// cacheGet returns the cached entry for name. The second result reports a live
+// entry; the returned addresses never alias the stored slice.
+func (r *Resolver) cacheGet(name string, now time.Time) (cacheEntry, bool) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	entry, ok := r.cache[name]
 	if !ok {
-		return nil, false
+		return cacheEntry{}, false
 	}
 	if !now.Before(entry.expiresAt) {
 		delete(r.cache, name)
-		return nil, false
+		return cacheEntry{}, false
 	}
-	return append([]netip.Addr(nil), entry.addrs...), true
+	entry.addrs = append([]netip.Addr(nil), entry.addrs...)
+	return entry, true
 }
 
 // cachePut stores addresses for ttl. Empty results are stored as negative
 // entries so repeated failures do not hammer the provider.
-func (r *Resolver) cachePut(name string, addrs []netip.Addr, ttl time.Duration, now time.Time) {
+func (r *Resolver) cachePut(name string, addrs []netip.Addr, nxdomain bool, ttl time.Duration, now time.Time) {
 	if ttl <= 0 {
 		return
 	}
@@ -59,7 +64,7 @@ func (r *Resolver) cachePut(name string, addrs []netip.Addr, ttl time.Duration, 
 	if _, exists := r.cache[name]; !exists && len(r.cache) >= maxCacheEntries {
 		r.evictLocked(now)
 	}
-	r.cache[name] = cacheEntry{addrs: stored, expiresAt: now.Add(ttl)}
+	r.cache[name] = cacheEntry{addrs: stored, nxdomain: nxdomain, expiresAt: now.Add(ttl)}
 }
 
 // evictLocked drops expired entries first and then arbitrary ones until there

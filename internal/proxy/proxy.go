@@ -15,6 +15,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"naviscopereborn/internal/outbound"
 )
 
 type Proxy struct {
@@ -55,7 +57,7 @@ func New(cfg Config, logger *slog.Logger) (*Proxy, error) {
 		cancel()
 		return nil, err
 	}
-	dial, err := p.dialChain(cfg)
+	dial, err := outbound.Dial(outbound.Options{SecureDNS: cfg.SecureDNS, UpstreamURL: cfg.UpstreamURL})
 	if err != nil {
 		cancel()
 		return nil, err

@@ -19,6 +19,7 @@ import (
 
 // Options is the shared command-line configuration for the proxy commands.
 type Options struct {
+	TUN bool
 	proxy.Config
 	UIListen string
 	NoUI     bool
@@ -40,7 +41,7 @@ func ParseFlags(args []string, output io.Writer) (Options, bool, error) {
 	fs.DurationVar(&cfg.RequestTimeout, "request-timeout", cfg.RequestTimeout, "total HTTP request/response timeout")
 	fs.DurationVar(&cfg.TunnelTimeout, "tunnel-timeout", cfg.TunnelTimeout, "maximum CONNECT tunnel lifetime")
 	fs.StringVar(&cfg.SecureDNS, "secure-dns", "", "DNS-over-HTTPS preset (cloudflare, google, quad9, opendns) or https://IP/dns-query URL; empty uses the system resolver")
-	fs.StringVar(&cfg.UpstreamURL, "upstream", "", "tunnel all outbound traffic through socks5://[user:pass@]host:port or http://host:port")
+	fs.BoolVar(&cfg.TUN, "tun", false, "transparent routing: capture all IPv4 traffic through a utun device (requires sudo; DNS always via DoH)")
 	if err := fs.Parse(args); err != nil {
 		return cfg, false, err
 	}

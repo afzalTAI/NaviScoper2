@@ -182,8 +182,8 @@ func TestDecodeResponseAAAAAndMixedTypes(t *testing.T) {
 func TestDecodeResponseNXDomain(t *testing.T) {
 	msg := response(t, header(0x0042, flagQR|rcodeNXDomain, 1, 0), question(typeA))
 	_, _, err := decodeResponse(msg, 0x0042, "www.example.com", typeA)
-	if !errors.Is(err, errNXDomain) {
-		t.Fatalf("err = %v, want errNXDomain", err)
+	if !errors.Is(err, ErrNXDomain) {
+		t.Fatalf("err = %v, want ErrNXDomain", err)
 	}
 }
 

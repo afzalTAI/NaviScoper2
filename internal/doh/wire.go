@@ -26,15 +26,20 @@ const (
 	flagQR uint16 = 0x8000
 	flagTC uint16 = 0x0200
 	flagRD uint16 = 0x0100
+	flagRA uint16 = 0x0080
+
+	opcodeMask  uint16 = 0x7800
+	opcodeQuery uint16 = 0
 
 	rcodeMask     uint16 = 0x000F
 	rcodeNoError  uint16 = 0
 	rcodeNXDomain uint16 = 3
 )
 
-// errNXDomain reports an authoritative "name does not exist" answer. It is a
-// normal, cacheable outcome rather than a transport failure.
-var errNXDomain = errors.New("doh: name does not exist")
+// ErrNXDomain reports an authoritative "name does not exist" answer. It is a
+// normal, cacheable outcome rather than a transport failure, and callers that
+// speak raw DNS translate it back into an NXDOMAIN response.
+var ErrNXDomain = errors.New("doh: name does not exist")
 
 // record is one resource record from the answer section. cname is set only for
 // CNAME records and already has compression pointers expanded.
@@ -312,7 +317,7 @@ func minTTLOf(a, b uint32) uint32 {
 
 // decodeResponse validates a response against the question that produced it
 // and extracts the answer addresses. A NXDOMAIN answer is reported as
-// errNXDomain.
+// ErrNXDomain.
 func decodeResponse(msg []byte, id uint16, host string, qtype uint16) ([]netip.Addr, uint32, error) {
 	m, err := parseMessage(msg)
 	if err != nil {
@@ -330,7 +335,7 @@ func decodeResponse(msg []byte, id uint16, host string, qtype uint16) ([]netip.A
 	switch rcode := m.flags & rcodeMask; rcode {
 	case rcodeNoError:
 	case rcodeNXDomain:
-		return nil, 0, errNXDomain
+		return nil, 0, ErrNXDomain
 	default:
 		return nil, 0, fmt.Errorf("doh: server returned rcode %d", rcode)
 	}

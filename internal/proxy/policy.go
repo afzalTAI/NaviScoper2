@@ -38,6 +38,12 @@ func (p *Proxy) UpdatePolicy(policy Policy) error {
 func (p *Proxy) SetPaused(paused bool) { p.paused.Store(paused) }
 func (p *Proxy) Paused() bool          { return p.paused.Load() }
 
+// DomainBlocked reports whether the active (unpaused) policy blocks host.
+// Exported for the transparent router's DNS filter.
+func (p *Proxy) DomainBlocked(host string) bool {
+	return !p.Paused() && p.blocked(host)
+}
+
 func (p *Proxy) Policy() Policy {
 	policy := *p.policy.Load()
 	policy.DenyDomains = append([]string{}, policy.DenyDomains...)

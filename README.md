@@ -89,6 +89,23 @@ Send all NaviScope traffic through a SOCKS5 or HTTP CONNECT provider:
 
 To combine with [Cloudflare Warp](https://1.1.1.1): install Warp, run `warp-cli set-mode proxy` (SOCKS5 on `127.0.0.1:40000`), then start NaviScope with the upstream flag above. Every outbound connection — HTTP and HTTPS tunnels alike — flows through the provider; HTTPS remains end-to-end encrypted.
 
+
+## Transparent routing (all traffic, sudo)
+
+Stage 2 of automatic routing captures **all** IPv4 traffic — every app, CLI tools, DNS — through a `utun` device into NaviScope's userspace network stack:
+
+```sh
+sudo ./dist/nscope -tun                       # all traffic; DNS via DoH (cloudflare default)
+sudo ./dist/nscope -tun -secure-dns quad9 -upstream socks5://127.0.0.1:40000
+```
+
+- Requires `sudo`, run from the CLI (the menu agent reports this if asked).
+- DNS inside the tunnel is always DNS-over-HTTPS — a system-resolver fallback would loop into the tunnel. Blocked domains return NXDOMAIN before any connection is made.
+- NaviScope's own sockets are pinned to the physical interface (`IP_BOUND_IF`) so they can never loop back into the tunnel.
+- Non-DNS UDP is relayed directly (not through an upstream).
+- Crash-safe: the tunnel routes vanish with the process, so a killed tunnel self-heals the routing table.
+- HTTPS stays end-to-end encrypted; filtering inside the tunnel is domain-based (via DNS) rather than URL-based.
+
 ## Web console
 
 `http://127.0.0.1:8082` (disable with `-no-ui`) shows session request counts, tunnel attempts, blocked requests, active connections, and connection limits. Edit blocked domains and cookie stripping live — changes apply to new requests immediately and last for the session. The console is loopback-only, host-pinned, token-guarded, and served with a restrictive CSP.
@@ -107,6 +124,7 @@ All configuration is via flags (no config files). The menu agent accepts the sam
 | `-connect-ports` | `443` | Permitted CONNECT destination ports |
 | `-secure-dns` | empty | DoH preset (`cloudflare`, `google`, `quad9`, `opendns`) or `https://IP/dns-query`; empty = system resolver |
 | `-upstream` | empty | Chain all outbound traffic via `socks5://[user:pass@]host:port` or `http://host:port` |
+| `-tun` | false | Transparent routing of all IPv4 traffic via utun (requires sudo; CLI only; DNS forced to DoH) |
 | `-metadata-log` | false | JSON log of operation and target host/port only — never credentials, cookies, bodies, paths, or queries |
 | `-request-timeout` | `2m` | Total HTTP exchange bound |
 | `-tunnel-timeout` | `10m` | Maximum CONNECT tunnel lifetime |
@@ -127,6 +145,8 @@ Project layout:
 
 ```
 cmd/nscope/          CLI proxy
+internal/tunroute/   utun device, routes, and interface pinning
+internal/tunstack/   userspace TCP/IP stack (gvisor) bridging flows to the outbound chain
 cmd/nscope-menu/     macOS menu-bar agent (cgo/AppKit; stub elsewhere)
 internal/proxy/      forwarding, tunnels, policies, pause mode
 internal/doh/        DNS-over-HTTPS resolver (RFC 8484/1035)
@@ -148,7 +168,7 @@ scripts/             build + packaging + emergency unroute helpers
 
 ## Roadmap
 
-- Transparent utun-based routing (all traffic including CLI tools and DNS)
+- TUN mode: IPv6 capture, non-DNS UDP via upstream, menu-agent integration
 - Ubuntu 24.04+ (`.deb`) and Windows 11 packages
 - Notarized DMG with a Developer ID
 

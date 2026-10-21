@@ -53,6 +53,13 @@ func run(ctx context.Context, args []string, output io.Writer) error {
 		return fmt.Errorf("listen: %w", err)
 	}
 	defer ln.Close()
+	if cfg.TUN {
+		stopTunnel, err := startTunnel(ctx, cfg, p, output)
+		if err != nil {
+			return err
+		}
+		defer stopTunnel()
+	}
 	if cfg.NoUI {
 		fmt.Fprintln(output, "nscope listening on", ln.Addr(), "(manual browser proxy configuration required)")
 		return p.Serve(ctx, ln)

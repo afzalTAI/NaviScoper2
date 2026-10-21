@@ -44,6 +44,9 @@ func run(ctx context.Context, args []string, output io.Writer) error {
 	if err != nil {
 		return err
 	}
+	if cfg.TUN {
+		return fmt.Errorf("transparent routing (-tun) runs from the CLI with sudo: nscope -tun")
+	}
 	var logger *slog.Logger
 	if metadata {
 		logger = slog.New(slog.NewJSONHandler(output, nil))
